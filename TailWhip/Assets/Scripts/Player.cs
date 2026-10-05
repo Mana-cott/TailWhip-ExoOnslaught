@@ -36,6 +36,10 @@ public class Player : MonoBehaviour
     [SerializeField] private float maxAimYaw = 12f;
     private Vector3 currAimWorldPoint;
 
+    [Header("Animation")]
+    [SerializeField] private Animator animator;
+    [SerializeField] private float sprintThreshold = 6f;
+
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
@@ -55,6 +59,7 @@ public class Player : MonoBehaviour
     {
         HandleMovement();
         UpdateHoverSlider();
+        UpdateAnimations();
     }
 
     // Movement handling function (moving, jumping, applying velocity)
@@ -160,11 +165,11 @@ public class Player : MonoBehaviour
         }
 
         // apply velocity
-        Vector3 combinedHorizontal = isStrafing ? dashVelocity : moveDir * moveSpeed;
-        Vector3 finalVelocity = combinedHorizontal + velocity;
+        Vector3 horizontalVelocity = isStrafing ? dashVelocity : moveDir * moveSpeed;
+        Vector3 finalVelocity = horizontalVelocity + velocity;
+        
         controller.Move(finalVelocity * Time.deltaTime);
     }
-
 
     private void UpdateHoverSlider()
     {
@@ -174,13 +179,24 @@ public class Player : MonoBehaviour
         }
     }
 
+    private void UpdateAnimations()
+    {
+        if (animator == null) return;
+
+        Vector3 horizontalVelocity = new Vector3(controller.velocity.x, 0f, controller.velocity.z);
+        float currentSpeed = horizontalVelocity.magnitude;
+
+        Debug.Log($"Current Speed: {currentSpeed}, Sprint Threshold: {sprintThreshold}");
+
+        animator.SetFloat("Speed", currentSpeed);
+    }
+
     private void UpdateAimTargetToPoint()
     {
         Camera camera = Camera.main;
         if (camera == null || reticle == null) return;
 
-        Vector2 reticleScreenPos = reticle.GetReticlePosition();
-        Ray ray = camera.ScreenPointToRay(reticleScreenPos);
+        Ray ray = camera.ScreenPointToRay(reticle.GetReticlePosition());
 
         if (Physics.Raycast(ray, out RaycastHit hit, Mathf.Infinity, aimLayerMask))
         {
