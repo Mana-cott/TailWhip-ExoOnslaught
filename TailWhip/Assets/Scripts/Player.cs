@@ -14,16 +14,11 @@ public class Player : MonoBehaviour
     [SerializeField] private float groundedTimer;
     public Vector3 velocity;
 
-    [Header("Dash")]
-    [SerializeField] private float strafeSpeed = 16f;
-    [SerializeField] private float strafeFuelDrainRate = 0.8f;
-    private Vector3 dashVelocity;
-    private bool isStrafing = false;
-
     [Header("Hovering")]
     [SerializeField] private Slider hoverSlider;
     [SerializeField] private float maxHoverTime = 2f;
     [SerializeField] private float hoverRechargeRate = 1f;
+    [SerializeField] private float hoverSpeed = 10f;
     private float currentHoverFuel;
     private bool isHovering = false;
 
@@ -78,7 +73,7 @@ public class Player : MonoBehaviour
                 velocity.y = -2f;
             }
 
-            if (!isStrafing && currentHoverFuel < maxHoverTime)
+            if (currentHoverFuel < maxHoverTime)
             {
                 currentHoverFuel += hoverRechargeRate * Time.deltaTime;
                 currentHoverFuel = Mathf.Min(currentHoverFuel, maxHoverTime);
@@ -106,30 +101,6 @@ public class Player : MonoBehaviour
         transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
 
         UpdateAimTargetToPoint();
-
-        bool isShiftHeld = Input.GetKey(KeyCode.LeftShift);
-
-        if (isShiftHeld && moveDir != Vector3.zero && currentHoverFuel > 0f)
-        {
-
-            currentHoverFuel -= strafeFuelDrainRate * Time.deltaTime;
-            if (currentHoverFuel <= 0f)
-            {
-                currentHoverFuel = 0f;
-                isStrafing = false;
-                dashVelocity = Vector3.zero;
-            } 
-            else
-            {
-                isStrafing = true;
-                dashVelocity = moveDir * strafeSpeed;
-            }
-        } 
-        else
-        {
-            isStrafing = false;
-            dashVelocity = Vector3.zero;
-        }
 
         // handle jump
         if (Input.GetKeyDown(KeyCode.Space) && groundedTimer > 0f)
@@ -165,7 +136,8 @@ public class Player : MonoBehaviour
         }
 
         // apply velocity
-        Vector3 horizontalVelocity = isStrafing ? dashVelocity : moveDir * moveSpeed;
+        float currentMoveSpeed = isHovering ? hoverSpeed : moveSpeed;
+        Vector3 horizontalVelocity = moveDir * currentMoveSpeed;
         Vector3 finalVelocity = horizontalVelocity + velocity;
         
         controller.Move(finalVelocity * Time.deltaTime);
@@ -185,10 +157,15 @@ public class Player : MonoBehaviour
 
         Vector3 horizontalVelocity = new Vector3(controller.velocity.x, 0f, controller.velocity.z);
         float currentSpeed = horizontalVelocity.magnitude;
-
-        Debug.Log($"Current Speed: {currentSpeed}, Sprint Threshold: {sprintThreshold}");
-
         animator.SetFloat("Speed", currentSpeed);
+
+        bool grounded = controller.isGrounded;
+        animator.SetBool("IsInAir", !grounded);
+
+        bool jumping = !grounded && velocity.y > 0.1f;
+        animator.SetBool("IsJumping", jumping);
+
+        animator.SetBool("IsHovering", isHovering);
     }
 
     private void UpdateAimTargetToPoint()

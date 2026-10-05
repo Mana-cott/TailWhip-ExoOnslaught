@@ -2364,12 +2364,20 @@ PrefabInstance:
       value: 10
       objectReference: {fileID: 0}
     - target: {fileID: 2471663368467736235, guid: 0fce80a6687b6a449ba780026996d34c, type: 3}
+      propertyPath: hoverSpeed
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 2471663368467736235, guid: 0fce80a6687b6a449ba780026996d34c, type: 3}
       propertyPath: hoverSlider
       value: 
       objectReference: {fileID: 2138785742}
     - target: {fileID: 2471663368467736235, guid: 0fce80a6687b6a449ba780026996d34c, type: 3}
       propertyPath: strafeSpeed
       value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 2471663368467736235, guid: 0fce80a6687b6a449ba780026996d34c, type: 3}
+      propertyPath: maxHoverTime
+      value: 5
       objectReference: {fileID: 0}
     - target: {fileID: 4676669136218832490, guid: 0fce80a6687b6a449ba780026996d34c, type: 3}
       propertyPath: m_LocalPosition.x
