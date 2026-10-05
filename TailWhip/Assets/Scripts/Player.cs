@@ -1,45 +1,82 @@
 using UnityEngine;
 using Unity.Cinemachine;
+using UnityEngine.UI;
 
 public class Player : MonoBehaviour
 {
     [Header("Character Movement")]
     [SerializeField] private CharacterController controller;
-    [SerializeField] private float moveSpeed = 1.5f;
-    [SerializeField] private float dashSpeed = 5f;
-    [SerializeField] private float rotationSpeed = 500f;
+    [SerializeField] private float moveSpeed = 5f;
+    [SerializeField] private float rotationSpeed = 6f;
     [SerializeField] private float jumpForce = 5f;
     [SerializeField] private float gravity = -9.81f;
     [SerializeField] private float coyoteTime = 0.2f;
     [SerializeField] private float groundedTimer;
     public Vector3 velocity;
 
-    [Header("Camera")]
+    [Header("Dash")]
+    [SerializeField] private float strafeSpeed = 16f;
+    [SerializeField] private float strafeFuelDrainRate = 0.8f;
+    private Vector3 dashVelocity;
+    private bool isStrafing = false;
+
+    [Header("Hovering")]
+    [SerializeField] private Slider hoverSlider;
+    [SerializeField] private float maxHoverTime = 2f;
+    [SerializeField] private float hoverRechargeRate = 1f;
+    private float currentHoverFuel;
+    private bool isHovering = false;
+
+    [Header("Reticle")]
     [SerializeField] private CinemachineCamera cam;
+
+    [SerializeField] private ReticleController reticle;
+    [SerializeField] private LayerMask aimLayerMask = ~0;
+    [SerializeField] private float defaultAimDistance = 50f;
+    [SerializeField] private float maxAimYaw = 12f;
+    private Vector3 currAimWorldPoint;
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
         if (controller == null) controller = GetComponent<CharacterController>();
-        if (cam != null) cam.Priority = 10;    
+        if (cam != null) cam.Priority = 10;
+        
+        currentHoverFuel = maxHoverTime;
+        if (hoverSlider != null)
+        {
+            hoverSlider.maxValue = maxHoverTime;
+            hoverSlider.value = currentHoverFuel;
+        }
     }
 
     // Update is called once per frame
     void Update()
     {
         HandleMovement();
+        UpdateHoverSlider();
     }
 
     // Movement handling function (moving, jumping, applying velocity)
-    private void HandleMovement(){
+    private void HandleMovement()
+    {
+        bool isGrounded = controller.isGrounded;
 
         // grounded check
-        if (controller.isGrounded)
+        if (isGrounded)
         {
+            isHovering = false;
             groundedTimer = coyoteTime;
+
             if (velocity.y < 0)
             {
                 velocity.y = -2f;
+            }
+
+            if (!isStrafing && currentHoverFuel < maxHoverTime)
+            {
+                currentHoverFuel += hoverRechargeRate * Time.deltaTime;
+                currentHoverFuel = Mathf.Min(currentHoverFuel, maxHoverTime);
             }
         }
         else
@@ -50,30 +87,43 @@ public class Player : MonoBehaviour
         // handle move
         float horizontal = Input.GetAxisRaw("Horizontal");
         float vertical = Input.GetAxisRaw("Vertical");
-        Vector3 movement = new Vector3(horizontal, 0f, vertical).normalized;
+        
+        GetCameraBasis(out Vector3 camForward, out Vector3 camRight);
+        
+        Vector3 input = new Vector3(horizontal, 0f, vertical);
+        Vector3 moveDir = input.sqrMagnitude > 0.01f ? (camForward * input.z + camRight * input.x).normalized : Vector3.zero;
 
-        if (movement != Vector3.zero)
+        if (reticle != null) reticle.UpdateReticle(horizontal);
+
+        float sway = reticle != null ? reticle.GetNormalizedOffset() : 0f;
+        Vector3 aimDir = Quaternion.AngleAxis(sway * maxAimYaw, Vector3.up) * camForward;
+        Quaternion targetRotation = Quaternion.LookRotation(aimDir, Vector3.up);
+        transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+
+        UpdateAimTargetToPoint();
+
+        bool isShiftHeld = Input.GetKey(KeyCode.LeftShift);
+
+        if (isShiftHeld && moveDir != Vector3.zero && currentHoverFuel > 0f)
         {
-            Vector3 moveDir;
 
-            if (cam != null)
+            currentHoverFuel -= strafeFuelDrainRate * Time.deltaTime;
+            if (currentHoverFuel <= 0f)
             {
-
-                Vector3 camForward = cam.transform.forward;
-                Vector3 camRight = cam.transform.right;
-
-                camForward.y = 0f;
-                camRight.y = 0f;
-                camForward.Normalize();
-                camRight.Normalize();
-
-                moveDir = (camForward * movement.z + camRight * movement.x).normalized;
-
-                controller.Move(moveDir * moveSpeed * Time.deltaTime);
-
-                Quaternion targetRotation = Quaternion.LookRotation(moveDir, Vector3.up);
-                transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+                currentHoverFuel = 0f;
+                isStrafing = false;
+                dashVelocity = Vector3.zero;
+            } 
+            else
+            {
+                isStrafing = true;
+                dashVelocity = moveDir * strafeSpeed;
             }
+        } 
+        else
+        {
+            isStrafing = false;
+            dashVelocity = Vector3.zero;
         }
 
         // handle jump
@@ -83,11 +133,82 @@ public class Player : MonoBehaviour
             groundedTimer = 0f;
         }
 
-        // handle gravity
-        velocity.y += gravity * Time.deltaTime;
+        if (!isGrounded && Input.GetKey(KeyCode.Space) && currentHoverFuel > 0f && velocity.y <= 0.5f)
+        {
+            isHovering = true;
+            currentHoverFuel -= Time.deltaTime;
 
+            if (currentHoverFuel <= 0f)
+            {
+                currentHoverFuel = 0f;
+                isHovering = false;
+            }
+        }
+        else
+        {
+            isHovering = false;
+        }
+
+        if (isHovering)
+        {
+            velocity.y = 0f;
+        } 
+        else if (!isGrounded)
+        {
+            // handle gravity
+            velocity.y += gravity * Time.deltaTime;
+        }
 
         // apply velocity
-        controller.Move(velocity * Time.deltaTime);
+        Vector3 combinedHorizontal = isStrafing ? dashVelocity : moveDir * moveSpeed;
+        Vector3 finalVelocity = combinedHorizontal + velocity;
+        controller.Move(finalVelocity * Time.deltaTime);
     }
+
+
+    private void UpdateHoverSlider()
+    {
+        if (hoverSlider != null)
+        {
+            hoverSlider.value = currentHoverFuel;
+        }
+    }
+
+    private void UpdateAimTargetToPoint()
+    {
+        Camera camera = Camera.main;
+        if (camera == null || reticle == null) return;
+
+        Vector2 reticleScreenPos = reticle.GetReticlePosition();
+        Ray ray = camera.ScreenPointToRay(reticleScreenPos);
+
+        if (Physics.Raycast(ray, out RaycastHit hit, Mathf.Infinity, aimLayerMask))
+        {
+            currAimWorldPoint = hit.point;
+        }
+        else
+        {
+            currAimWorldPoint = ray.GetPoint(defaultAimDistance);
+        }
+    }
+
+    private void GetCameraBasis(out Vector3 forward, out Vector3 right)
+    {
+        Transform camTransform = cam != null ? cam.transform : Camera.main.transform;
+    
+        forward = camTransform.forward;
+        right = camTransform.right;
+        forward.y = 0f;
+        right.y = 0f;
+
+        if (forward.sqrMagnitude < 0.01f)
+        {
+            forward = camTransform.up;
+            forward.y = 0f;
+        }
+
+        forward.Normalize();
+        right.Normalize();
+    }
+
 }
