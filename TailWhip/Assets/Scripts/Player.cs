@@ -31,9 +31,15 @@ public class Player : MonoBehaviour
     [SerializeField] private float maxAimYaw = 12f;
     private Vector3 currAimWorldPoint;
 
+    [Header("Spin Attack")]
+    [SerializeField] private float spinFuelDrainRate = 1f;
+    [SerializeField] private float spinMoveSpeed = 5f;
+    [SerializeField] private float minFuelToSpin = 0.2f;
+    private bool isSpinning = false;
+    public bool IsSpinning => isSpinning;
+
     [Header("Animation")]
     [SerializeField] private Animator animator;
-    [SerializeField] private float sprintThreshold = 6f;
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
@@ -73,7 +79,7 @@ public class Player : MonoBehaviour
                 velocity.y = -2f;
             }
 
-            if (currentHoverFuel < maxHoverTime)
+            if (currentHoverFuel < maxHoverTime && !isSpinning)
             {
                 currentHoverFuel += hoverRechargeRate * Time.deltaTime;
                 currentHoverFuel = Mathf.Min(currentHoverFuel, maxHoverTime);
@@ -83,6 +89,8 @@ public class Player : MonoBehaviour
         {
             groundedTimer -= Time.deltaTime;
         }
+
+        HandleSpin();
 
         // handle move
         float horizontal = Input.GetAxisRaw("Horizontal");
@@ -109,7 +117,7 @@ public class Player : MonoBehaviour
             groundedTimer = 0f;
         }
 
-        if (!isGrounded && Input.GetKey(KeyCode.Space) && currentHoverFuel > 0f && velocity.y <= 0.5f)
+        if (!isGrounded && !isSpinning && Input.GetKey(KeyCode.Space) && currentHoverFuel > 0f && velocity.y <= 0.5f)
         {
             isHovering = true;
             currentHoverFuel -= Time.deltaTime;
@@ -143,6 +151,28 @@ public class Player : MonoBehaviour
         controller.Move(finalVelocity * Time.deltaTime);
     }
 
+    private void HandleSpin()
+    {
+        bool wantsSpin = Input.GetMouseButton(1);
+
+        if (!isSpinning)
+        {
+            if(wantsSpin && currentHoverFuel >= minFuelToSpin)
+            {
+                isSpinning = true;
+            }
+        }
+        else
+        {
+            currentHoverFuel -= spinFuelDrainRate * Time.deltaTime;
+
+            if (!wantsSpin || currentHoverFuel <= 0f)
+            {
+                currentHoverFuel = Mathf.Max(currentHoverFuel, 0f);
+                isSpinning = false;
+            }
+        }
+    }
     private void UpdateHoverSlider()
     {
         if (hoverSlider != null)
@@ -166,6 +196,8 @@ public class Player : MonoBehaviour
         animator.SetBool("IsJumping", jumping);
 
         animator.SetBool("IsHovering", isHovering);
+
+        animator.SetBool("IsSpinning", isSpinning);
     }
 
     private void UpdateAimTargetToPoint()
@@ -204,4 +236,16 @@ public class Player : MonoBehaviour
         right.Normalize();
     }
 
+    public Vector3 GetAimWorldPoint()
+    {
+        return currAimWorldPoint;
+    }
+
+    public void PlayShootAnimation()
+    {
+        if (animator != null)
+        {
+            animator.SetTrigger("Shoot");
+        }
+    }
 }
